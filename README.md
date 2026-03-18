@@ -32,7 +32,7 @@ npm --version    # deve mostrar 8 ou superior
 
 ```bash
 git clone https://github.com/seu-usuario/digital-signer.git
-cd digital-signer
+cd Assinatura_Digital
 ```
 
 ---

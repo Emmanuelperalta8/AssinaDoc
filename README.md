@@ -16,7 +16,7 @@ Materia: Segurança de Sistemas
 Antes de rodar, instale:
 
 - [Node.js 18+](https://nodejs.org) — para rodar o backend
-- [Git](https://git-scm.com) — para clonar o repositório
+- https://github.com/Emmanuelperalta8/AssinaDoc — para clonar o repositório
 
 Verifique se estão instalados:
 ```bash

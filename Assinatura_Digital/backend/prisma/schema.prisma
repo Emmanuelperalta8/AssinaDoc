@@ -1,0 +1,49 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String      @id @default(uuid())
+  username     String      @unique
+  passwordHash String      @map("password_hash")
+  publicKey    String      @map("public_key")
+  privateKey   String      @map("private_key")
+  createdAt    DateTime    @default(now()) @map("created_at")
+
+  signatures   Signature[]
+
+  @@map("users")
+}
+
+model Signature {
+  id          String   @id @default(uuid())
+  userId      String   @map("user_id")
+  textContent String   @map("text_content")
+  textHash    String   @map("text_hash")
+  signature   String
+  algorithm   String   @default("RSA-SHA256")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  user        User     @relation(fields: [userId], references: [id])
+  logs        VerificationLog[]
+
+  @@map("signatures")
+}
+
+model VerificationLog {
+  id          String    @id @default(uuid())
+  signatureId String?   @map("signature_id")
+  verifiedAt  DateTime  @default(now()) @map("verified_at")
+  result      String
+  ipAddress   String?   @map("ip_address")
+  notes       String?
+
+  signature   Signature? @relation(fields: [signatureId], references: [id])
+
+  @@map("verification_logs")
+}

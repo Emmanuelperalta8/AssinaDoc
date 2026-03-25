@@ -118,7 +118,23 @@ app.post('/sign', authMiddleware, async (req, res) => {
   });
 });
 
-// ── GET /verify/:id  (público) ───────────────────────────────
+// ── Helper: resolve ID (UUID ou DOC-XXXX-XXXX-XXXX) ─────────
+async function resolveSignature(id) {
+  const docMatch = id.match(/^DOC-([0-9A-Fa-f]{4})-([0-9A-Fa-f]{4})-([0-9A-Fa-f]{4})$/i);
+  if (docMatch) {
+    const prefix = (docMatch[1] + docMatch[2] + docMatch[3]).toLowerCase();
+    return prisma.signature.findFirst({
+      where:   { textHash: { startsWith: prefix } },
+      include: { user: true },
+    });
+  }
+  return prisma.signature.findUnique({
+    where:   { id },
+    include: { user: true },
+  });
+}
+
+// ── GET /verify/:id  (público) — aceita somente UUID ─────────
 app.get('/verify/:id', async (req, res) => {
   const ip  = req.ip;
   const sig = await prisma.signature.findUnique({
@@ -176,6 +192,40 @@ app.post('/verify/manual', async (req, res) => {
   res.json({ valid: isValid, signer: user.username, algorithm: 'RSA-SHA256', verifiedAt: new Date() });
 });
 
+// ── POST /verify/by-key  (público) ───────────────────────────
+app.post('/verify/by-key', async (req, res) => {
+  const { signatureId, publicKey } = req.body;
+  const ip = req.ip;
+
+  if (!signatureId || !publicKey)
+    return res.status(400).json({ error: 'signatureId e publicKey são obrigatórios.' });
+
+  const sig = await resolveSignature(signatureId);
+
+  if (!sig) {
+    await prisma.verificationLog.create({
+      data: { signatureId: null, result: 'NOT_FOUND', ipAddress: ip, notes: 'Verificação por chave: ID não encontrado' },
+    });
+    return res.status(404).json({ valid: false, error: 'Documento não encontrado.' });
+  }
+
+  const isValid = verifySignature(sig.textContent, sig.signature, publicKey);
+
+  await prisma.verificationLog.create({
+    data: { signatureId: sig.id, result: isValid ? 'VALID' : 'INVALID', ipAddress: ip, notes: 'Verificação por chave fornecida' },
+  });
+
+  res.json({
+    valid:       isValid,
+    signatureId: sig.id,
+    signer:      sig.user.username,
+    algorithm:   sig.algorithm,
+    textHash:    sig.textHash,
+    createdAt:   sig.createdAt,
+    verifiedAt:  new Date(),
+  });
+});
+
 // ── GET /my-signatures  (autenticado) ────────────────────────
 app.get('/my-signatures', authMiddleware, async (req, res) => {
   const sigs = await prisma.signature.findMany({
@@ -190,3 +240,25 @@ app.get('/my-signatures', authMiddleware, async (req, res) => {
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => console.log(`✅ Backend em http://localhost:${PORT}`));
 module.exports = app;
+
+
+
+// ── GET /profile  (autenticado) ──────────────────────────────
+app.get('/profile', authMiddleware, async (req, res) => {
+  res.json({
+    userId:     req.user.id,
+    username:   req.user.username,
+    publicKey:  req.user.publicKey,
+    privateKey: req.user.privateKey,
+    createdAt:  req.user.createdAt,
+  });
+});
+
+// ── GET /public-keys  (público) ──────────────────────────────
+app.get('/public-keys', async (_req, res) => {
+  const users = await prisma.user.findMany({
+    orderBy: { createdAt: 'asc' },
+    select:  { id: true, username: true, publicKey: true, createdAt: true },
+  });
+  res.json(users);
+});
